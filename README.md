@@ -41,7 +41,6 @@ pip install tifffile scikit-image scipy matplotlib numpy pandas
 Run the analysis script from the repo folder containing the TIFFs:
 
 ```bash
-cd '/Users/vaishnavinagesh/Desktop/Rogala Lab Images Olga/potential-segmentation-quantizer'
 python analyze_coloc.py
 ```
 
