@@ -504,9 +504,13 @@ for idx, label in enumerate(label_list):
     for c0_path, c1_path, cm_path, collection_id in triplets:
         print(f"  Collection: {collection_id}", flush=True)
         print(f"    [1/3] Loading...", flush=True)
-        c0 = load_plane(c0_path)
-        c1 = load_plane(c1_path)
-        cm = load_plane(cm_path)
+        try:
+            c0 = load_plane(c0_path)
+            c1 = load_plane(c1_path)
+            cm = load_plane(cm_path)
+        except Exception as e:
+            print(f"    ⚠️  SKIPPING — failed to load: {e}", flush=True)
+            continue
 
         rows = analyze_collection(c0, c1, cm, label, collection_id,
                                    residual_factor=RESIDUAL_FACTOR)
