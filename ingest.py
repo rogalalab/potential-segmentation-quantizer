@@ -48,6 +48,10 @@ After running, OPEN THE MANIFEST and verify:
 import os, re, argparse
 from collections import defaultdict
 import pandas as pd
+import sys
+
+# Add pipeline directory to path so utils is importable
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description='Image ingestion — generate analysis manifest')
@@ -59,17 +63,22 @@ parser.add_argument('--layout',    type=str, required=True,
 parser.add_argument('--ch_dapi',   type=int, required=True,
                     help='Channel number for DAPI (e.g. 0). Verify with FIJI before running.')
 parser.add_argument('--ch_lamp1',  type=int, required=True,
-                    help='Channel number for LAMP1 (e.g. 1). Verify with FIJI before running.')
+                    help='Channel number for reference channel C1 (e.g. 1). Verify with FIJI.')
 parser.add_argument('--ch_marker', type=int, required=True,
-                    help='Channel number for Raptor/mTOR (e.g. 2). Verify with FIJI before running.')
+                    help='Channel number for marker channel (e.g. 2). Verify with FIJI.')
 parser.add_argument('--output',    type=str, default=None,
                     help='Output manifest path (default: <image_dir>/manifest.tsv)')
+parser.add_argument('--ch1_name',    type=str, default='LAMP1',
+                    help='Display name for C1 channel (e.g. LAMP1, SAMTOR). Default: LAMP1')
 parser.add_argument('--marker_name', type=str, default='Raptor',
-                    help='Name of the marker channel for display (default: Raptor)')
+                    help='Display name for marker channel (e.g. Raptor, SHMT1). Default: Raptor')
 parser.add_argument('--cell_line',   type=str, default='HEK293',
                     help='Cell line name for display (default: HEK293)')
 parser.add_argument('--dry_run', action='store_true',
                     help='Print discovered files without writing manifest')
+parser.add_argument('--integrity_check', action='store_true',
+                    help='Test-open every TIFF before writing manifest. '
+                         'Reports corrupted files. Slower but catches bad files early.')
 
 # Flat layout options
 parser.add_argument('--flat_pattern', type=str, default='auto',
@@ -143,9 +152,6 @@ def discover_subdir(image_dir):
 # Pattern regexes — each returns (label, stem) or None
 FLAT_PATTERNS = {
     'aa_drug': re.compile(
-        # Matches: AA+_10uM6698_C1_XY... or AA+_20nMRapa_C3 - 1_XY...
-        # Group 1: AA status + drug  e.g. AA+_10uM6698
-        # Group 2: collection        e.g. C1 or C3 - 1
         r'^(AA[+\-]_[A-Za-z0-9µuμ]+)_(C\d+(?:\s*-\s*\d+)?)_XY\d+',
         re.IGNORECASE),
     'hek293': re.compile(
@@ -153,6 +159,12 @@ FLAT_PATTERNS = {
         re.IGNORECASE),
     'miapaca2': re.compile(
         r'^(MiaPaca2_(?:FED|ST)_(?:HG|LG))',
+        re.IGNORECASE),
+    'exp109': re.compile(
+        r'^#(\d+)[_\-](\d+)_XY\d+',
+        re.IGNORECASE),
+    'timeline': re.compile(
+        r'^(HEK293_STARVED_HBSS_[\d_]+_MIN)',
         re.IGNORECASE),
 }
 
@@ -171,6 +183,40 @@ def parse_flat_label(fname, pattern_name):
     if not m:
         return None
     raw = m.group(1).strip().rstrip('_')
+
+    if pattern_name == 'exp109':
+        # Plate map from experiment description
+        PLATE_MAP = {
+            1:  ('Basal',                  '-Dox', '+DMSO'),
+            2:  ('Basal',                  '-Dox', '+AP21967'),
+            3:  ('Basal',                  '+Dox', '+DMSO'),
+            4:  ('Basal',                  '+Dox', '+AP21967'),
+            5:  ('Met Starvation',         '-Dox', '+DMSO'),
+            6:  ('Met Starvation',         '-Dox', '+AP21967'),
+            7:  ('Met Starvation',         '+Dox', '+DMSO'),
+            8:  ('Met Starvation',         '+Dox', '+AP21967'),
+            9:  ('Met Starv + SAM',        '-Dox', '+DMSO'),
+            10: ('Met Starv + SAM',        '-Dox', '+AP21967'),
+            11: ('Met Starv + SAM',        '+Dox', '+DMSO'),
+            12: ('Met Starv + SAM',        '+Dox', '+AP21967'),
+        }
+        m2 = re.match(r'^#(\d+)[_\-](\d+)_XY', os.path.basename(fname))
+        if not m2:
+            return None
+        well = int(m2.group(1))
+        if well not in PLATE_MAP:
+            return None
+        metabolic, dox, drug = PLATE_MAP[well]
+        return f"{metabolic} / {dox} / {drug}"
+
+    if pattern_name == 'timeline':
+        # HEK293_STARVED_HBSS_10_MIN → "10 min"
+        # HEK293_STARVED_HBSS_2_5_MIN → "2.5 min"
+        m2 = re.search(r'HBSS_([\d_]+)_MIN', raw, re.IGNORECASE)
+        if m2:
+            t = m2.group(1).rstrip('_').replace('_', '.')
+            return f"{t} min"
+        return raw
 
     if pattern_name == 'aa_drug':
         # raw = "AA+_10uM6698" or "AA-_DMSO"
@@ -233,8 +279,17 @@ def discover_flat(image_dir, pattern_name='auto'):
         if pattern_name == 'aa_drug':
             m = FLAT_PATTERNS['aa_drug'].match(os.path.basename(f))
             collection = m.group(2).strip() if m and len(m.groups()) >= 2 else stem_of(os.path.basename(f))
+        elif pattern_name == 'exp109':
+            # Use well-replicate as collection e.g. "well8_rep3"
+            m = FLAT_PATTERNS['exp109'].match(os.path.basename(f))
+            if m:
+                collection = f"well{m.group(1)}_rep{m.group(2)}"
+            else:
+                collection = stem_of(os.path.basename(f))
         else:
-            collection = stem_of(os.path.basename(f))
+            # For timeline and others: use XY coordinates as collection ID
+            xy = re.search(r'(XY\d+)', os.path.basename(f))
+            collection = xy.group(1) if xy else stem_of(os.path.basename(f))
 
         stems[(label, collection)][ch] = os.path.join(image_dir, f)
 
@@ -279,6 +334,25 @@ for cond in sorted(conditions):
     n = len(df[df['label'] == cond])
     print(f"  {cond}: {n} collection(s)")
 
+# ── Integrity check ───────────────────────────────────────────────────────────
+if args.integrity_check:
+    print("\nRunning integrity check on all files...")
+    from utils import check_file_integrity
+    bad_files = []
+    for _, row in df.iterrows():
+        for col in ['ch_dapi','ch_lamp1','ch_marker']:
+            ok, info = check_file_integrity(row[col])
+            if not ok:
+                bad_files.append((row['label'], row['collection'], col, info))
+                print(f"  ❌ {row['label']} / {row['collection']} / {col}: {info}")
+            else:
+                print(f"  ✓ {os.path.basename(row[col])} {info}")
+    if bad_files:
+        print(f"\n⚠️  {len(bad_files)} corrupted file(s) found.")
+        print("Remove or replace them before running analysis.")
+    else:
+        print(f"\n✓ All {len(df)*3} files opened successfully.")
+
 # ── Dry run ───────────────────────────────────────────────────────────────────
 if args.dry_run:
     print("\n[Dry run — no file written]")
@@ -288,6 +362,7 @@ if args.dry_run:
 
 # ── Write manifest ────────────────────────────────────────────────────────────
 # Add metadata columns
+df['ch1_name']    = args.ch1_name
 df['marker_name'] = args.marker_name
 df['cell_line']   = args.cell_line
 df['ch_dapi_num']   = CH_DAPI
