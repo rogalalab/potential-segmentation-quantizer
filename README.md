@@ -93,14 +93,14 @@ python ingest.py \
 Run on one representative image — use your control condition (DMSO, Basal, FullMedia):
 
 ```bash
-python param_sweep.py \
+python object_coloc_sweep.py \
   --manifest ~/Desktop/manifest.tsv \
   --output ~/Desktop/sweep
 ```
 
 Or with individual files:
 ```bash
-python param_sweep.py \
+python object_coloc_sweep.py \
   --dapi  "/path/C0.tif" \
   --lamp1 "/path/C1.tif" \
   --marker "/path/C2.tif" \
@@ -117,7 +117,7 @@ python param_sweep.py \
 
 **Narrow the sweep if needed:**
 ```bash
-python param_sweep.py \
+python object_coloc_sweep.py \
   --manifest ~/Desktop/manifest.tsv \
   --residual_factors 0.5 1.0 1.5 \
   --lamp1_percentiles 78 82 85 \
@@ -200,7 +200,7 @@ Look at the scatterplots from param_sweep. If channels show a flat horizontal cl
 | manders_coloc.py | Costes automatic thresholding | None — automatic per cell |
 | manders_coloc.py | Skip Costes (threshold = 0) | `--skip_costes` |
 | Both | Background subtraction aggressiveness | `--residual_factor`, `--window` |
-| param_sweep.py | Sweeps all of the above | `--lamp1_percentiles`, `--marker_percentiles`, `--residual_factors`, `--proximities` |
+| object_coloc_sweep.py | Sweeps all of the above | `--lamp1_percentiles`, `--marker_percentiles`, `--residual_factors`, `--proximities` |
 
 ---
 
@@ -269,18 +269,6 @@ Local median background estimation window in pixels. Must be large enough to mea
 
 ---
 
-## Datasets Analyzed
-
-| Dataset | Cell line | Conditions | Channels | Key finding |
-|---|---|---|---|---|
-| MiaPaca2 071526 | MiaPaca2 | FED/ST × HG/LG | C0=DAPI C1=LAMP1 C3=mTOR | Unexpected high coloc in ST/LG — autophagic lysosome reformation |
-| HEK293 071526 | HEK293 | DMSO/M6659/AZD × No Refed/Refed | C0=DAPI C1=LAMP1 C2=Raptor | AZD8055 traps Raptor on lysosome |
-| HEK293 080326 | HEK293 | AA+/AA- × drug dose response | C0=DAPI C1=LAMP1 C2=Raptor | 6698 dose-dependent reduction at 10-20µM in AA- |
-| HBSS Timeline | HEK293 | 2.5→120 min starvation | C0=DAPI C1=LAMP1 C2=Raptor | Non-monotonic — autophagic rebound at 50-75 min |
-| Exp109 | HEK293 | Basal/Met Starv/SAM × Dox × AP21967 | C0=DAPI C1=SAMTOR C2=SHMT1 | SAMTOR suppresses SHMT1 puncta in basal; starvation drives condensation |
-
----
-
 ## Methods Summary (for papers/grants)
 
 > Confocal z-stacks were collapsed using maximum intensity projection. Local median background subtraction (32×32 pixel window) was applied to each channel to remove spatially varying illumination gradients. Nuclei were segmented from DAPI using Otsu thresholding, watershed separation, and morphological operations; the nucleus was excluded from all colocalization measurements. Discrete puncta were detected as connected pixel regions above the 82nd (reference) and 93rd (marker) percentile of background-subtracted cytoplasmic signal, with a minimum size of 5 pixels. Object-based colocalization was scored per cell as the fraction of marker puncta whose centroids fell within the reference channel mask dilated by 3 pixels. All metrics were computed per cell and averaged across cells per condition.
@@ -321,5 +309,5 @@ Download the latest version of the script — this happens when `--ch_dapi` argu
 
 ## Contact
 
-Vaishnavi Nagesh — vnagesh@stanford.edu (or current email)  
+Vaishnavi Nagesh — nageshv@stanford.edu (or current email)  
 Rogala Lab — Stanford University
