@@ -22,8 +22,6 @@ potential-segmentation-quantizer/
 └── verify_channels.ipynb     ← Visual channel verification notebook
 ```
 
-> **Critical:** `utils.py` must be in the same folder as all other scripts. It is imported by every script and contains all shared functions.
-
 ---
 
 ## Standard Workflow — Run In This Order
@@ -78,14 +76,27 @@ python ingest.py \
 
 **Supported flat filename patterns (auto-detected):**
 
-| Pattern | Example filename |
-|---|---|
-| `aa_drug` | `AA+_10uM6698_C1_XY..._C0.tif` |
-| `hek293` | `Slide1_DMSO_Refed_..._C0.tif` |
-| `miapaca2` | `MiaPaca2_FED_HG_..._C0.tif` |
-| `timeline` | `HEK293_STARVED_HBSS_10_MIN_..._C0.tif` |
-| `exp109` | `#1_1_XY..._C0.tif` (well-based) |
+{cell_line}_{date}_{experiment_id}_{condition}_{dose}{unit}_{treatment}_{well}_{rep}_{channel}.tif
 
+| Field | Description | Example values |
+|-------|-------------|----------------|
+|cellline |	Cell line used | MiaPaca2, HEK293 |
+| yymmdd | Acquisition date | 071526 |
+| expid | Experiment/project identifier | Exp109, 6698, HBSStimeline |
+| nutrient | Nutrient/media condition | AAplus, AAminus, FED, ST, HBSS |
+| treatment-dose | Drug + dose, or vehicle if none | AZD8055-10uM, DMSO-0uM, vehicle |
+| timepoint | Duration/timepoint, NA if not applicable | t0, t2.5min, t120min, NA |
+| well | Well identifier | well3, A1 |
+| rep | Replicate number | rep1 |
+| channel | Imaging channel — use marker name, not just ch1/ch2 | LAMP1, Raptor, SAMTOR, SHMT1, DAPI |
+
+*Rules:*
+
+- Use underscores _ between fields only — never within a field name
+- Use hyphens - within the treatment-dose field only (e.g. AZD8055-10uM)
+- Use NA for timepoint when the experiment is not a time course
+Channel must be the marker protein name — never C0, C1, ch1 etc.
+- Decimal timepoints use p as decimal separator: t2p5min not t2.5min
 ---
 
 ### Step 2 — Calibrate parameters
